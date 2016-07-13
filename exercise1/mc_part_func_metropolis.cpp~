@@ -183,10 +183,10 @@ int main(int argc, char* argv[]){
 	V2 /= (double)blocks;
 
 	for(i=0;i<blocks;i++){
-		sig_e = (E.memory[i] - ENERGY)*(E.memory[i] - ENERGY);
-		sig_V1 = (V1_.memory[i] - V2)*(V1_.memory[i] - V1);
-		sig_V2 = (V2_.memory[i] - V2)*(V2_.memory[i] - V2);
-		sig_accm = (acc_moves.memory[i] - accepted_moves)*(acc_moves.memory[i] - accepted_moves);
+		sig_e = fabs((E.memory[i] - ENERGY)*(E.memory[i] - ENERGY));
+		sig_V1 = fabs((V1_.memory[i] - V2)*(V1_.memory[i] - V1));
+		sig_V2 = fabs((V2_.memory[i] - V2)*(V2_.memory[i] - V2));
+		sig_accm = fabs((acc_moves.memory[i] - accepted_moves)*(acc_moves.memory[i] - accepted_moves));
 	}
 	sig_e = pow(sig_e,0.5)/(double) blocks;
 	sig_V1 = pow(sig_V1,0.5)/(double) blocks;

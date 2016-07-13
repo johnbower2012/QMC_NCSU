@@ -109,9 +109,9 @@ int main(int argc, char* argv[]){
 			for(k=0;k<steps;k++){
 				//generator particle and direction
 				rand_part = part_dist(part_generator);
-				rand_move = position_dist(init_generator);
+				rand_move = move_dist(move_generator);
 				//calculate new position
-				new_pos.memory[rand_part] = rand_move;
+				new_pos.memory[rand_part] = (new_pos.memory[rand_part] - (int)pow(-1,rand_move))%grid;
 				//calculate new positions given new position indices
 				for(l=0;l<particles;l++){
 					new_position.memory[l] = step_size*(double)new_pos.memory[l];
