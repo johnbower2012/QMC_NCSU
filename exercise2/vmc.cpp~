@@ -19,26 +19,31 @@ inline double gaussian_energy(double alpha, double omega, double x){
 
 int main(int argc, char* argv[]){
 	//declare variables
-	int 	i, j, k, l,
-			steps, walkers, run,
-			accm=0;
+	int 	i, j, k, l, m,
+			eq_blocks, blocks, samples, walkers, run,
+			accm=0, totm=0, sample_walkers=0;
 	double 	alpha, omega,
 			sigma, random,
 			psi, psi_new, prob,
 			x, x_new,
-			ENERGY_;
+			E, E_SQ, accmratio;
 	char* filename;
 
-	if(argc<6){
-		std::cout << "Bad usage. Enter also 'steps walkers run sigma filename' on same line." << std::endl;
+	if(argc<7){
+		std::cout << "Bad usage. Enter also 'equil_blocks blocks samples run walkers sigma filename' on same line." << std::endl;
 		exit(1);
 	}
 	else{
-		steps = atoi(argv[1]);
-		walkers = atoi(argv[2]);
-		run = atoi(argv[3]);
-		sigma = atof(argv[4]);
-		filename = argv[5];
+		eq_blocks = atoi(argv[1]);
+		blocks = atoi(argv[2]);
+		samples = atoi(argv[3]);
+		run = atoi(argv[4]);
+		walkers = atoi(argv[5]);
+		sigma = atof(argv[6]);
+		filename = argv[7];
+		omega = 1;
+		totm = samples*run*walkers;
+		sample_walkers = samples*walkers;
 	}
 
 	//random generation
@@ -47,48 +52,61 @@ int main(int argc, char* argv[]){
 	std::default_random_engine generator(seed);
 
 	//declare arrays
-	matrix<double> 	walker(steps,walkers,0.0),
-					energy(steps,walkers,0.0);
-	array<double>	ENERGY(walkers,0.0);
+	array<double>	energy(walkers,0.0),
+					energy_sq(walkers,0.0),
+					walker(walkers,0.0),
+					acc_move(walkers,0.0),
+					acc_move_block(blocks,0.0);
+	matrix<double>	energy_block(blocks,2,0.0);
 
-	//initialize system	
+	//initialize system
 	for(i=0;i<walkers;i++){
 		random = real_dist(generator);
-		walker.memory[0][i] = x = (random - 0.5)*RANGE*2.0;
-		energy.memory[0][i] = gaussian_energy(alpha,omega,x);
+		walker.memory[i] = x = (random - 0.5)*RANGE*2.0;
+		energy.memory[i] = gaussian_energy(alpha,omega,x);
 	}
-
+	//open file
 	ofile.open(filename);
-	omega = 0.5;
-	for(l=1;l<20;l++){
+	std::cout << "alpha" << std::setw(15) << "analytic" << std::setw(15) << "E" << std::setw(15) << "E_sig" << std::setw(15) << "accmratio" << std::endl;
+	for(i=0;i<walkers;i++){
+		random = real_dist(generator);
+		walker.memory[i] = (random - 0.5)*RANGE*2.0;
+	}
+	for(m=1;m<17;m++){
 		//initialize system	
-		alpha = (double) l/5.0;
-		accm = 0; ENERGY_ = 0.0;
-		for(i=0;i<walkers;i++){
-			random = real_dist(generator);
-			walker.memory[0][i] = x = (random - 0.5)*RANGE*2.0;
-			energy.memory[0][i] = gaussian_energy(alpha,omega,x);
-			ENERGY.memory[i] = 0.0;
-		}
-		//run MC
-		for(i=1;i<steps;i++){
-			for(j=0;j<walkers;j++){
-				x = walker.memory[i-1][j];
-				for(k=0;k<run;k++){
-					//current values
-					psi = pow(gaussian_psi(alpha,x),2);
+		alpha = (double) m/4.0;
+//----->  equilibrate
+		for(l=0;l<eq_blocks;l++){
+			//reset energies
+			accm = 0;
+			//samples within each block
+			for(i=0;i<samples;i++){
+				//loop over walkers
+				for(j=0;j<walkers;j++){
+					//set initial x coordinate
+					x = walker.memory[j];
+					//loop over number of runs before statistics are calculated
+					for(k=0;k<run;k++){
+						//current values
+						psi = pow(gaussian_psi(alpha,x),2);
 
-					//new values
-					random = real_dist(generator);
-					x_new = x + sigma*(random - 0.5);
-					psi_new = pow(gaussian_psi(alpha,x_new),2);
-
-					//comparison
-					if(psi_new < psi){
-						prob = psi_new/psi;
+						//new values
 						random = real_dist(generator);
-						//deny
-						if(random > prob){
+						x_new = x + sigma*(random - 0.5);
+						psi_new = pow(gaussian_psi(alpha,x_new),2);
+
+						//comparison
+						if(psi_new < psi){
+							prob = psi_new/psi;
+							random = real_dist(generator);
+							//deny
+							if(random > prob){
+							}
+							//accept
+							else{
+								x = x_new;
+								accm++;
+							}
 						}
 						//accept
 						else{
@@ -96,25 +114,86 @@ int main(int argc, char* argv[]){
 							accm++;
 						}
 					}
-					//accept
-					else{
-						x = x_new;
-						accm++;
-					}
+					//update walker position && energy statistics
+					walker.memory[j] = x;
 				}
-				energy.memory[i][j] = gaussian_energy(alpha,omega,x);
-				walker.memory[i][j] = x;
 			}
 		}
-		for(i=0;i<walkers;i++){
-			for(j=0;j<steps;j++){
-				ENERGY.memory[i] += energy.memory[j][i];
+//-----> run MC
+		for(l=0;l<blocks;l++){
+			//reset energies
+			accm = 0;
+			for(i=0;i<walkers;i++){
+				energy.memory[i] = 0.0;
+				energy_sq.memory[i] = 0.0;
 			}
-			ENERGY.memory[i] /= steps;
-			ENERGY_ += ENERGY.memory[i];
+			//samples within each block
+			for(i=0;i<samples;i++){
+				//loop over walkers
+				for(j=0;j<walkers;j++){
+					//set initial x coordinate
+					x = walker.memory[j];
+					//loop over number of runs before statistics are calculated
+					for(k=0;k<run;k++){
+						//current values
+						psi = pow(gaussian_psi(alpha,x),2);
+
+						//new values
+						random = real_dist(generator);
+						x_new = x + sigma*(random - 0.5);
+						psi_new = pow(gaussian_psi(alpha,x_new),2);
+
+						//comparison
+						if(psi_new < psi){
+							prob = psi_new/psi;
+							random = real_dist(generator);
+							//deny
+							if(random > prob){
+							}
+							//accept
+							else{
+								x = x_new;
+								accm++;
+							}
+						}
+						//accept
+						else{
+							x = x_new;
+							accm++;
+						}
+					}
+					//update walker position && energy statistics
+					walker.memory[j] = x;
+					energy.memory[j] += gaussian_energy(alpha,omega,x);
+					energy_sq.memory[j] += energy.memory[j]*energy.memory[j];
+				}
+			}
+			//block statistics
+			for(i=0;i<walkers;i++){
+				energy_block.memory[l][0] += energy.memory[i];
+				energy_block.memory[l][1] += energy_sq.memory[i];
+			}
+			energy_block.memory[l][0] /= (double)sample_walkers;
+			energy_block.memory[l][1] /= (double)sample_walkers;
+			acc_move_block.memory[l] = (double)accm/(double)totm;
+
+			E = energy_block.memory[l][0];
+			E_SQ = energy_block.memory[l][1];
+			energy_block.memory[l][1] = pow(fabs(E_SQ - E*E),0.5);
 		}
-		ENERGY_ /= walkers;
-		ofile << alpha << std::setw(15) << ENERGY_ << std::setw(15) << 0.25*(omega*omega - alpha*alpha)/alpha + alpha/2.0 << std::setw(15) << (double)accm/(double)(run*steps*walkers) << std::endl;
+		//average block statistics
+		E = E_SQ = accmratio = 0.0;
+		for(l=0;l<blocks;l++){
+			E += energy_block.memory[l][0];
+			E_SQ += energy_block.memory[l][1];
+			accmratio += acc_move_block.memory[l];
+		}
+		E /= (double)blocks;
+		E_SQ /= (double)blocks;
+		accmratio /= (double)blocks;
+		//write to filename
+		ofile << alpha << std::setw(15) << 0.25*(omega*omega - alpha*alpha)/alpha + alpha/2.0 << std::setw(15) << E << std::setw(15) << E_SQ << std::setw(15) << accmratio << std::endl;
+		std::cout << alpha << std::setw(15) << 0.25*(omega*omega - alpha*alpha)/alpha + alpha/2.0 << std::setw(15) << E << std::setw(15) << E_SQ << std::setw(15) << accmratio << std::endl;
 	}
 	ofile.close();
 
